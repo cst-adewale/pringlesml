@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}DeliveryML{% endblock %} — Nigerian E-Commerce Prediction</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="nav-inner">
+            <a href="/" class="nav-brand">
+                <span class="brand-icon">▣</span>
+                <span class="brand-text">DeliveryML</span>
+            </a>
+            <ul class="nav-links">
+                <li><a href="/" class="nav-link {% if request.endpoint == 'index' %}active{% endif %}">Dashboard</a></li>
+                <li><a href="/results" class="nav-link {% if request.endpoint == 'results' %}active{% endif %}">Results</a></li>
+                <li><a href="/predict" class="nav-link {% if request.endpoint == 'predict' %}active{% endif %}">Predict</a></li>
+                <li><a href="/about" class="nav-link {% if request.endpoint == 'about' %}active{% endif %}">About</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Page Content -->
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-inner">
+            <span class="footer-left">DeliveryML — Nigerian E-Commerce Logistics Prediction</span>
+            <span class="footer-right">B.Sc. Computer Science · Caleb University</span>
+        </div>
+    </footer>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

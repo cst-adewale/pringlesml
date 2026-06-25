@@ -1,0 +1,206 @@
+{
+  "timestamp": "2026-06-25T23:24:44.309229",
+  "dataset_info": {
+    "n_samples": 10000,
+    "n_features": 10,
+    "class_distribution": {
+      "success": 8267,
+      "delayed": 1406,
+      "failed": 327
+    }
+  },
+  "feature_names": [
+    "delivery_distance_km",
+    "traffic_level",
+    "time_of_day",
+    "location_type",
+    "order_size_kg",
+    "weather_condition",
+    "rider_experience_months",
+    "address_quality_score",
+    "day_of_week",
+    "season"
+  ],
+  "models": {
+    "logistic_regression": {
+      "accuracy": 0.862,
+      "precision": 0.6769950195365869,
+      "recall": 0.5466168656730388,
+      "f1": 0.5844340173076231,
+      "confusion_matrix": [
+        [
+          1185,
+          55,
+          0
+        ],
+        [
+          106,
+          97,
+          8
+        ],
+        [
+          11,
+          27,
+          11
+        ]
+      ],
+      "per_class": {
+        "labels": [
+          "success",
+          "delayed",
+          "failed"
+        ],
+        "precision": [
+          0.9101382488479263,
+          0.5418994413407822,
+          0.5789473684210527
+        ],
+        "recall": [
+          0.9556451612903226,
+          0.4597156398104265,
+          0.22448979591836735
+        ],
+        "f1": [
+          0.932336742722266,
+          0.49743589743589745,
+          0.3235294117647059
+        ]
+      },
+      "best_params": "{'C': 10.0}"
+    },
+    "decision_tree": {
+      "accuracy": 0.84,
+      "precision": 0.6275931242956158,
+      "recall": 0.6175682274132708,
+      "f1": 0.617322738149962,
+      "confusion_matrix": [
+        [
+          1119,
+          117,
+          4
+        ],
+        [
+          73,
+          123,
+          15
+        ],
+        [
+          4,
+          27,
+          18
+        ]
+      ],
+      "per_class": {
+        "labels": [
+          "success",
+          "delayed",
+          "failed"
+        ],
+        "precision": [
+          0.93561872909699,
+          0.4606741573033708,
+          0.4864864864864865
+        ],
+        "recall": [
+          0.9024193548387097,
+          0.5829383886255924,
+          0.3673469387755102
+        ],
+        "f1": [
+          0.9187192118226601,
+          0.5146443514644351,
+          0.4186046511627907
+        ]
+      },
+      "best_params": "{'max_depth': 20, 'min_samples_leaf': 2, 'min_samples_split': 2}"
+    },
+    "random_forest": {
+      "accuracy": 0.8826666666666667,
+      "precision": 0.8004769630780627,
+      "recall": 0.5379913148564731,
+      "f1": 0.5791342897368387,
+      "confusion_matrix": [
+        [
+          1213,
+          27,
+          0
+        ],
+        [
+          106,
+          104,
+          1
+        ],
+        [
+          2,
+          40,
+          7
+        ]
+      ],
+      "per_class": {
+        "labels": [
+          "success",
+          "delayed",
+          "failed"
+        ],
+        "precision": [
+          0.9182437547312642,
+          0.6081871345029239,
+          0.875
+        ],
+        "recall": [
+          0.978225806451613,
+          0.4928909952606635,
+          0.14285714285714285
+        ],
+        "f1": [
+          0.9472862163217494,
+          0.5445026178010471,
+          0.24561403508771928
+        ]
+      },
+      "best_params": "{'max_depth': 15, 'max_features': 'sqrt', 'n_estimators': 100}",
+      "feature_importance": [
+        {
+          "feature": "traffic_level",
+          "importance": 0.1731
+        },
+        {
+          "feature": "delivery_distance_km",
+          "importance": 0.1548
+        },
+        {
+          "feature": "rider_experience_months",
+          "importance": 0.1256
+        },
+        {
+          "feature": "time_of_day",
+          "importance": 0.1154
+        },
+        {
+          "feature": "order_size_kg",
+          "importance": 0.1124
+        },
+        {
+          "feature": "location_type",
+          "importance": 0.0941
+        },
+        {
+          "feature": "address_quality_score",
+          "importance": 0.093
+        },
+        {
+          "feature": "day_of_week",
+          "importance": 0.0568
+        },
+        {
+          "feature": "weather_condition",
+          "importance": 0.0448
+        },
+        {
+          "feature": "season",
+          "importance": 0.0299
+        }
+      ]
+    }
+  }
+}

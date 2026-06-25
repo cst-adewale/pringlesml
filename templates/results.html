@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+{% block title %}Results{% endblock %}
+
+{% block content %}
+
+<section class="page-header">
+    <div class="page-header-inner">
+        <h1 class="page-title">Model Results</h1>
+        <p class="page-sub">Performance comparison across all three classifiers evaluated on the held-out test set (15% of 10,000 records).</p>
+    </div>
+</section>
+
+<!-- Loading / Error State -->
+<div id="loadingState" class="state-container">
+    <div class="state-box">
+        <span class="state-icon">⟳</span>
+        <p>Loading results...</p>
+    </div>
+</div>
+
+<div id="noResults" class="state-container hidden">
+    <div class="state-box">
+        <span class="state-icon">○</span>
+        <p>No results yet. <a href="/">Train the models first →</a></p>
+    </div>
+</div>
+
+<!-- Results Content -->
+<div id="resultsContent" class="hidden">
+
+    <!-- Metrics Comparison Table -->
+    <section class="section">
+        <div class="section-inner">
+            <h2 class="section-title">Performance Comparison</h2>
+            <p class="section-sub">Macro-averaged metrics on the test set. Labels: S = Success, D = Delayed, F = Failed.</p>
+            <div class="table-wrap">
+                <table class="results-table">
+                    <thead>
+                        <tr>
+                            <th>Model</th>
+                            <th>Accuracy</th>
+                            <th>Precision</th>
+                            <th>Recall</th>
+                            <th>F1-Score</th>
+                        </tr>
+                    </thead>
+                    <tbody id="metricsTable"></tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <!-- Per-Class Metrics -->
+    <section class="section section-alt">
+        <div class="section-inner">
+            <h2 class="section-title">Per-Class Metrics</h2>
+            <p class="section-sub">Precision, Recall, and F1-Score broken down by outcome class for the Random Forest model.</p>
+            <div class="perclass-grid" id="perClassGrid"></div>
+        </div>
+    </section>
+
+    <!-- Confusion Matrices -->
+    <section class="section">
+        <div class="section-inner">
+            <h2 class="section-title">Confusion Matrices</h2>
+            <p class="section-sub">Rows = Actual class. Columns = Predicted class. Labels: Success · Delayed · Failed.</p>
+            <div class="cm-grid" id="cmGrid"></div>
+        </div>
+    </section>
+
+    <!-- Feature Importance -->
+    <section class="section section-alt">
+        <div class="section-inner">
+            <h2 class="section-title">Feature Importance</h2>
+            <p class="section-sub">Ranked by mean decrease in impurity from the Random Forest model.</p>
+            <div class="fi-chart" id="fiChart"></div>
+        </div>
+    </section>
+
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const MODEL_LABELS = {
+    logistic_regression: 'Logistic Regression',
+    decision_tree: 'Decision Tree',
+    random_forest: 'Random Forest'
+};
+const CLASS_LABELS = ['Success', 'Delayed', 'Failed'];
+
+async function loadResults() {
+    try {
+        const res = await fetch('/api/results');
+        if (res.status === 404) {
+            document.getElementById('loadingState').classList.add('hidden');
+            document.getElementById('noResults').classList.remove('hidden');
+            return;
+        }
+        const data = await res.json();
+        renderResults(data);
+    } catch (e) {
+        document.getElementById('loadingState').classList.add('hidden');
+        document.getElementById('noResults').classList.remove('hidden');
+    }
+}
+
+function renderResults(data) {
+    document.getElementById('loadingState').classList.add('hidden');
+    document.getElementById('resultsContent').classList.remove('hidden');
+
+    const models = data.models;
+
+    // Metrics table
+    const tbody = document.getElementById('metricsTable');
+    const modelKeys = ['logistic_regression', 'decision_tree', 'random_forest'];
+    let bestF1 = Math.max(...modelKeys.map(k => models[k].f1));
+
+    modelKeys.forEach(key => {
+        const m = models[key];
+        const isBest = m.f1 === bestF1;
+        tbody.innerHTML += `
+            <tr class="${isBest ? 'best-row' : ''}">
+                <td><strong>${MODEL_LABELS[key]}</strong>${isBest ? ' <span class="best-badge">Best</span>' : ''}</td>
+                <td>${(m.accuracy * 100).toFixed(2)}%</td>
+                <td>${(m.precision * 100).toFixed(2)}%</td>
+                <td>${(m.recall * 100).toFixed(2)}%</td>
+                <td><strong>${m.f1.toFixed(4)}</strong></td>
+            </tr>`;
+    });
+
+    // Per-class metrics (Random Forest)
+    const rf = models.random_forest;
+    const pcGrid = document.getElementById('perClassGrid');
+    CLASS_LABELS.forEach((label, i) => {
+        pcGrid.innerHTML += `
+            <div class="perclass-card">
+                <div class="perclass-label">${label}</div>
+                <div class="perclass-metrics">
+                    <div class="perclass-metric">
+                        <span class="pm-val">${(rf.per_class.precision[i] * 100).toFixed(1)}%</span>
+                        <span class="pm-name">Precision</span>
+                    </div>
+                    <div class="perclass-metric">
+                        <span class="pm-val">${(rf.per_class.recall[i] * 100).toFixed(1)}%</span>
+                        <span class="pm-name">Recall</span>
+                    </div>
+                    <div class="perclass-metric">
+                        <span class="pm-val">${(rf.per_class.f1[i] * 100).toFixed(1)}%</span>
+                        <span class="pm-name">F1</span>
+                    </div>
+                </div>
+            </div>`;
+    });
+
+    // Confusion matrices
+    const cmGrid = document.getElementById('cmGrid');
+    modelKeys.forEach(key => {
+        const cm = models[key].confusion_matrix;
+        const total = cm.flat().reduce((a, b) => a + b, 0);
+        let rows = '';
+        cm.forEach((row, i) => {
+            let cells = row.map((val, j) => {
+                const pct = total > 0 ? (val / total * 100).toFixed(1) : '0.0';
+                const isDiag = i === j;
+                return `<td class="cm-cell ${isDiag ? 'cm-diag' : ''}">${val}<br><small>${pct}%</small></td>`;
+            }).join('');
+            rows += `<tr><td class="cm-label">${CLASS_LABELS[i]}</td>${cells}</tr>`;
+        });
+
+        cmGrid.innerHTML += `
+            <div class="cm-card">
+                <h3 class="cm-title">${MODEL_LABELS[key]}</h3>
+                <table class="cm-table">
+                    <thead>
+                        <tr>
+                            <th></th>
+                            ${CLASS_LABELS.map(l => `<th>Pred: ${l}</th>`).join('')}
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>`;
+    });
+
+    // Feature importance
+    if (rf.feature_importance) {
+        const fiChart = document.getElementById('fiChart');
+        const maxVal = rf.feature_importance[0].importance;
+        rf.feature_importance.forEach(item => {
+            const pct = (item.importance / maxVal * 100).toFixed(1);
+            const label = item.feature.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+            fiChart.innerHTML += `
+                <div class="fi-row">
+                    <span class="fi-label">${label}</span>
+                    <div class="fi-bar-wrap">
+                        <div class="fi-bar" style="width: ${pct}%"></div>
+                    </div>
+                    <span class="fi-val">${(item.importance * 100).toFixed(2)}%</span>
+                </div>`;
+        });
+    }
+}
+
+loadResults();
+</script>
+{% endblock %}

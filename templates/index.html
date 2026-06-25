@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+
+<!-- Hero -->
+<section class="hero">
+    <div class="hero-inner">
+        <div class="hero-label">Nigerian E-Commerce Logistics · Machine Learning</div>
+        <h1 class="hero-title">Predicting Delivery Outcomes<br>Before They Happen</h1>
+        <p class="hero-sub">Three supervised classifiers trained on 10,000 synthetic Nigerian delivery records to predict Success, Delay, or Failure — before the rider leaves the depot.</p>
+        <div class="hero-actions">
+            <button class="btn btn-primary" id="trainBtn" onclick="trainModels()">
+                <span class="btn-icon">⚙</span> Train Models
+            </button>
+            <a href="/results" class="btn btn-secondary">View Results →</a>
+        </div>
+        <div id="trainStatus" class="train-status hidden"></div>
+    </div>
+</section>
+
+<!-- Stats Bar -->
+<section class="stats-bar">
+    <div class="stats-inner">
+        <div class="stat-item">
+            <span class="stat-number">10,000</span>
+            <span class="stat-label">Delivery Records</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat-item">
+            <span class="stat-number">10</span>
+            <span class="stat-label">Predictor Features</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat-item">
+            <span class="stat-number">3</span>
+            <span class="stat-label">ML Models</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat-item">
+            <span class="stat-number">3</span>
+            <span class="stat-label">Outcome Classes</span>
+        </div>
+    </div>
+</section>
+
+<!-- Models Overview -->
+<section class="section">
+    <div class="section-inner">
+        <h2 class="section-title">Models</h2>
+        <p class="section-sub">Three algorithms compared using 5-fold stratified cross-validation with GridSearchCV hyperparameter tuning.</p>
+        <div class="model-cards">
+
+            <div class="model-card">
+                <div class="model-card-top">
+                    <span class="model-tag">Baseline</span>
+                    <span class="model-num">01</span>
+                </div>
+                <h3 class="model-name">Logistic Regression</h3>
+                <p class="model-desc">Multinomial logistic regression. Interpretable, fast, and serves as the performance baseline for comparison.</p>
+                <div class="model-meta">
+                    <span>Tuned: C (regularization)</span>
+                </div>
+            </div>
+
+            <div class="model-card">
+                <div class="model-card-top">
+                    <span class="model-tag">Non-linear</span>
+                    <span class="model-num">02</span>
+                </div>
+                <h3 class="model-name">Decision Tree</h3>
+                <p class="model-desc">Captures non-linear feature interactions. Produces human-readable rules for operational insight.</p>
+                <div class="model-meta">
+                    <span>Tuned: max_depth, min_samples</span>
+                </div>
+            </div>
+
+            <div class="model-card model-card-highlight">
+                <div class="model-card-top">
+                    <span class="model-tag">Best Expected</span>
+                    <span class="model-num">03</span>
+                </div>
+                <h3 class="model-name">Random Forest</h3>
+                <p class="model-desc">Ensemble of 100–300 trees. Reduces variance, provides feature importance rankings for operational decision-making.</p>
+                <div class="model-meta">
+                    <span>Tuned: n_estimators, max_depth, max_features</span>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</section>
+
+<!-- Features Overview -->
+<section class="section section-alt">
+    <div class="section-inner">
+        <h2 class="section-title">Predictor Features</h2>
+        <p class="section-sub">10 operational and environmental variables calibrated to Nigerian logistics conditions.</p>
+        <div class="features-grid">
+            <div class="feature-row">
+                <span class="feature-name">Delivery Distance (km)</span>
+                <span class="feature-type numeric">Numeric</span>
+                <span class="feature-impact high">High Impact</span>
+            </div>
+            <div class="feature-row">
+                <span class="feature-name">Traffic Level (1–5)</span>
+                <span class="feature-type ordinal">Ordinal</span>
+                <span class="feature-impact high">High Impact</span>
+            </div>
+            <div class="feature-row">
+                <span class="feature-name">Time of Day</span>
+                <span class="feature-type categorical">Categorical</span>
+                <span class="feature-impact high">High Impact</span>
+            </div>
+            <div class="feature-row">
+                <span class="feature-name">Location Type</span>
+                <span class="feature-type categorical">Categorical</span>
+                <span class="feature-impact medium">Medium Impact</span>
+            </div>
+            <div class="feature-row">
+                <span class="feature-name">Weather Condition</span>
+                <span class="feature-type categorical">Categorical</span>
+                <span class="feature-impact medium">Medium Impact</span>
+            </div>
+            <div class="feature-row">
+                <span class="feature-name">Rider Experience (months)</span>
+                <span class="feature-type numeric">Numeric</span>
+                <span class="feature-impact medium">Medium Impact</span>
+            </div>
+            <div class="feature-row">
+                <span class="feature-name">Address Quality Score (1–5)</span>
+                <span class="feature-type ordinal">Ordinal</span>
+                <span class="feature-impact medium">Medium Impact</span>
+            </div>
+            <div class="feature-row">
+                <span class="feature-name">Order Size (kg)</span>
+                <span class="feature-type numeric">Numeric</span>
+                <span class="feature-impact low">Low Impact</span>
+            </div>
+            <div class="feature-row">
+                <span class="feature-name">Day of Week</span>
+                <span class="feature-type categorical">Categorical</span>
+                <span class="feature-impact low">Low Impact</span>
+            </div>
+            <div class="feature-row">
+                <span class="feature-name">Season</span>
+                <span class="feature-type categorical">Categorical</span>
+                <span class="feature-impact low">Low Impact</span>
+            </div>
+        </div>
+    </div>
+</section>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function trainModels() {
+    const btn = document.getElementById('trainBtn');
+    const status = document.getElementById('trainStatus');
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="btn-icon">⟳</span> Training...';
+    status.className = 'train-status info';
+    status.textContent = 'Generating dataset and training 3 models with GridSearchCV. This may take 2–5 minutes...';
+
+    try {
+        const res = await fetch('/api/train', { method: 'POST' });
+        const data = await res.json();
+
+        if (data.status === 'success') {
+            status.className = 'train-status success';
+            const rf = data.results.random_forest;
+            status.innerHTML = `✓ Training complete — Random Forest accuracy: <strong>${(rf.accuracy * 100).toFixed(1)}%</strong>, F1: <strong>${rf.f1.toFixed(3)}</strong>. <a href="/results">View full results →</a>`;
+            btn.innerHTML = '<span class="btn-icon">✓</span> Trained';
+        } else {
+            throw new Error(data.message);
+        }
+    } catch (err) {
+        status.className = 'train-status error';
+        status.textContent = '✗ Error: ' + err.message;
+        btn.disabled = false;
+        btn.innerHTML = '<span class="btn-icon">⚙</span> Retry Training';
+    }
+}
+</script>
+{% endblock %}
