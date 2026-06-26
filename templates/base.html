@@ -28,17 +28,22 @@
                 <span class="brand-icon">▣</span>
                 <span class="brand-text">DeliveryML</span>
             </a>
-            <ul class="nav-links">
+            <ul class="nav-links" id="navLinks">
                 <li><a href="/" class="nav-link {% if request.endpoint == 'index' %}active{% endif %}">Dashboard</a></li>
                 <li><a href="/results" class="nav-link {% if request.endpoint == 'results' %}active{% endif %}">Results</a></li>
                 <li><a href="/predict" class="nav-link {% if request.endpoint == 'predict_page' %}active{% endif %}">Predict</a></li>
                 <li><a href="/about" class="nav-link {% if request.endpoint == 'about' %}active{% endif %}">About</a></li>
-                <li>
-                    <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle light/dark mode">
-                        <span id="themeIcon">☀</span>
-                    </button>
-                </li>
             </ul>
+            <div class="nav-actions">
+                <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle light/dark mode">
+                    <span id="themeIcon">☀</span>
+                </button>
+                <button class="nav-toggle" id="navToggle" onclick="toggleMobileMenu()" aria-label="Toggle Navigation" title="Toggle menu">
+                    <span class="hamburger-bar"></span>
+                    <span class="hamburger-bar"></span>
+                    <span class="hamburger-bar"></span>
+                </button>
+            </div>
         </div>
     </nav>
 
@@ -76,6 +81,27 @@
             localStorage.setItem('theme', next);
             applyTheme(next);
         }
+
+        function toggleMobileMenu() {
+            const navLinks = document.getElementById('navLinks');
+            const navToggle = document.getElementById('navToggle');
+            if (navLinks && navToggle) {
+                navLinks.classList.toggle('mobile-active');
+                navToggle.classList.toggle('open');
+            }
+        }
+
+        // Close mobile menu when clicking a link
+        document.querySelectorAll('.nav-link').forEach(link => {
+            link.addEventListener('click', () => {
+                const navLinks = document.getElementById('navLinks');
+                const navToggle = document.getElementById('navToggle');
+                if (navLinks && navLinks.classList.contains('mobile-active')) {
+                    navLinks.classList.remove('mobile-active');
+                    navToggle.classList.remove('open');
+                }
+            });
+        });
 
         // Init
         applyTheme(localStorage.getItem('theme') || 'dark');

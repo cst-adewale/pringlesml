@@ -21,9 +21,24 @@ from sklearn.metrics import (
 import warnings
 warnings.filterwarnings('ignore')
 
+import threading
+from werkzeug.utils import secure_filename
+
 app = Flask(__name__)
 os.makedirs('models', exist_ok=True)
 os.makedirs('results', exist_ok=True)
+os.makedirs('uploads', exist_ok=True)
+
+# Thread-safe training state
+training_state = {
+    'status': 'idle',      # idle, training, success, error
+    'progress': 0,         # 0 to 100
+    'message': 'System is ready for training.',
+    'error_message': None,
+    'results': None
+}
+training_lock = threading.Lock()
+
 
 
 # ============================================================================
@@ -174,20 +189,30 @@ def engineer_features(df):
     """
     df_eng = df.copy()
     
+    # Ensure columns exist and fill NaNs safely before feature engineering
+    dist = pd.to_numeric(df_eng.get('delivery_distance_km'), errors='coerce').fillna(10.0)
+    traf = pd.to_numeric(df_eng.get('traffic_level'), errors='coerce').fillna(3.0)
+    tod = df_eng.get('time_of_day', 'afternoon').astype(str).str.lower().str.strip()
+    loc = df_eng.get('location_type', 'mainland').astype(str).str.lower().str.strip()
+    addr = pd.to_numeric(df_eng.get('address_quality_score'), errors='coerce').fillna(2.0)
+    seas = df_eng.get('season', 'dry').astype(str).str.lower().str.strip()
+
     # 1. Distance-traffic interaction
-    df_eng['distance_traffic_interaction'] = df_eng['delivery_distance_km'] * df_eng['traffic_level']
+    df_eng['distance_traffic_interaction'] = dist * traf
 
     # 2. Time risk category (evening and night periods)
-    df_eng['time_risk_category'] = df_eng['time_of_day'].isin(['evening', 'night']).astype(int)
+    df_eng['time_risk_category'] = tod.isin(['evening', 'night']).astype(int)
 
     # 3. Zone risk score (location mapping + address quality score)
     loc_mapping = {'island': 1, 'mainland': 2, 'suburban': 3, 'rural': 4}
-    df_eng['zone_risk_score'] = df_eng['location_type'].map(loc_mapping) + df_eng['address_quality_score']
+    mapped_loc = loc.map(loc_mapping).fillna(2)
+    df_eng['zone_risk_score'] = mapped_loc + addr
 
     # 4. Seasonal disruption indicator (rainy season flag)
-    df_eng['seasonal_disruption_indicator'] = (df_eng['season'] == 'rainy').astype(int)
+    df_eng['seasonal_disruption_indicator'] = (seas == 'rainy').astype(int)
 
     return df_eng
+
 
 
 # ============================================================================
@@ -292,37 +317,71 @@ def about():
 # API ENDPOINTS
 # ============================================================================
 
-@app.route('/api/train', methods=['POST'])
-def train():
-    try:
-        print("\n" + "="*60)
-        print("STARTING MODEL TRAINING")
-        print("="*60)
+# ============================================================================
+# API ENDPOINTS (ASYNCHRONOUS BACKGROUND TRAINING)
+# ============================================================================
 
-        # Step 1: Generate data (with calibrated thresholds & artificial NaNs)
-        print("\n[1/5] Generating dataset...")
-        df = generate_dataset(10000)
-        print(f"  SUCCESS: Generated {len(df)} records")
-        print(f"  Class distribution: {df['delivery_outcome'].value_counts().to_dict()}")
+def update_state(status=None, progress=None, message=None, error_message=None, results=None):
+    with training_lock:
+        if status is not None:
+            training_state['status'] = status
+        if progress is not None:
+            training_state['progress'] = progress
+        if message is not None:
+            training_state['message'] = message
+        if error_message is not None:
+            training_state['error_message'] = error_message
+        if results is not None:
+            training_state['results'] = results
+
+
+def validate_csv(df):
+    required_cols = [
+        'delivery_distance_km', 'traffic_level', 'time_of_day', 'location_type', 
+        'order_size_kg', 'weather_condition', 'rider_experience_months', 
+        'address_quality_score', 'day_of_week', 'season', 'delivery_outcome'
+    ]
+    missing = [col for col in required_cols if col not in df.columns]
+    if missing:
+        raise ValueError(f"Missing required columns: {', '.join(missing)}")
+    
+    # Check if target variable has the expected classes
+    unique_outcomes = df['delivery_outcome'].dropna().unique().tolist()
+    valid_outcomes = ['success', 'delayed', 'failed']
+    invalid_outcomes = [o for o in unique_outcomes if o not in valid_outcomes]
+    if len(unique_outcomes) == 0:
+        raise ValueError("The 'delivery_outcome' column cannot be empty.")
+    if invalid_outcomes:
+        raise ValueError(f"Invalid outcomes: {invalid_outcomes}. Must be: {valid_outcomes}")
+
+
+def run_training_thread(filepath=None):
+    try:
+        update_state(status='training', progress=5, message='Loading and validating dataset...', error_message=None, results=None)
+        
+        if filepath:
+            print(f"[THREAD] Loading custom CSV: {filepath}")
+            df = pd.read_csv(filepath)
+            validate_csv(df)
+            update_state(progress=15, message=f'Successfully validated CSV with {len(df)} records. Running imputation...')
+        else:
+            print("[THREAD] Generating synthetic calibrated dataset...")
+            df = generate_dataset(10000)
+            update_state(progress=15, message='Default calibrated dataset generated. Running imputation...')
 
         # Step 2: Imputation & Outlier Treatment
-        print("\n[2/5] Performing preprocessing pipeline...")
         df_imputed, medians, modes = impute_missing_values(df)
-        print("  SUCCESS: Missing values imputed (median for numeric, mode for categorical)")
         df_treated, bounds = treat_outliers(df_imputed)
-        print("  SUCCESS: Outliers treated using IQR Winsorization")
+        update_state(progress=30, message='Imputation and outlier capping complete. Engineering derived features...')
 
         # Step 3: Feature Engineering
-        print("\n[3/5] Engineering derived features...")
         df_features = engineer_features(df_treated)
-        print("  SUCCESS: Added distance_traffic_interaction, time_risk_category, zone_risk_score, seasonal_disruption_indicator")
+        update_state(progress=40, message='Derived features engineered. Encoding categorical variables & scaling...')
 
         # Step 4: Encoding & Scaling
-        print("\n[4/5] Encoding categorical features and scaling numeric features...")
         y = df_features['delivery_outcome'].copy()
         X_raw = df_features.drop(columns=['delivery_outcome'])
 
-        # Separate nominal, ordinal, and numeric columns
         nominal_cols = ['time_of_day', 'location_type', 'weather_condition', 'day_of_week', 'season']
         numeric_cols = [
             'delivery_distance_km', 'traffic_level', 'order_size_kg', 
@@ -336,7 +395,6 @@ def train():
         X_nominal_encoded = encoder.fit_transform(X_raw[nominal_cols])
         nominal_feature_names = encoder.get_feature_names_out(nominal_cols).tolist()
         
-        # Reconstruct DataFrame with engineered and encoded columns
         X_encoded_df = pd.DataFrame(X_nominal_encoded, columns=nominal_feature_names)
         X_numeric_df = X_raw[numeric_cols].reset_index(drop=True)
         
@@ -353,15 +411,59 @@ def train():
             X, y, test_size=0.15, random_state=42, stratify=y)
         X_train, X_val, y_train, y_val = train_test_split(
             X_temp, y_temp, test_size=0.176, random_state=42, stratify=y_temp)
-        print(f"  SUCCESS: Train: {len(X_train)}  Val: {len(X_val)}  Test: {len(X_test)}")
 
         # Step 5: Train Models
-        print("\n[5/5] Training models with GridSearchCV (5-fold CV)...")
-        results, models_dict = train_all_models(
-            X_train, X_val, y_train, y_val, X_test, y_test, final_feature_names)
+        update_state(progress=50, message='Training Logistic Regression baseline with 5-fold CV...')
+        cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+        
+        results = {}
+        models_dict = {}
+
+        # 1. Logistic Regression
+        grid_lr = GridSearchCV(
+            LogisticRegression(random_state=42, solver='lbfgs', max_iter=1000),
+            {'C': [0.01, 0.1, 1.0, 10.0]},
+            cv=cv, scoring='f1_macro', n_jobs=-1
+        )
+        grid_lr.fit(X_train, y_train)
+        y_pred = grid_lr.best_estimator_.predict(X_test)
+        results['logistic_regression'] = get_metrics(y_test, y_pred, grid_lr.best_params_)
+        models_dict['logistic_regression'] = grid_lr.best_estimator_
+
+        update_state(progress=70, message='Training Decision Tree classifier with GridSearchCV hyperparameter tuning...')
+
+        # 2. Decision Tree
+        grid_dt = GridSearchCV(
+            DecisionTreeClassifier(random_state=42),
+            {'max_depth': [5,10,15,20], 'min_samples_split': [2,5,10], 'min_samples_leaf': [1,2,5]},
+            cv=cv, scoring='f1_macro', n_jobs=-1
+        )
+        grid_dt.fit(X_train, y_train)
+        y_pred = grid_dt.best_estimator_.predict(X_test)
+        results['decision_tree'] = get_metrics(y_test, y_pred, grid_dt.best_params_)
+        models_dict['decision_tree'] = grid_dt.best_estimator_
+
+        update_state(progress=85, message='Training Random Forest ensemble (combining 100-300 estimators)...')
+
+        # 3. Random Forest
+        grid_rf = GridSearchCV(
+            RandomForestClassifier(random_state=42, n_jobs=-1),
+            {'n_estimators': [100,200,300], 'max_depth': [10,15,20], 'max_features': ['sqrt','log2']},
+            cv=cv, scoring='f1_macro', n_jobs=-1
+        )
+        grid_rf.fit(X_train, y_train)
+        y_pred = grid_rf.best_estimator_.predict(X_test)
+        results['random_forest'] = get_metrics(y_test, y_pred, grid_rf.best_params_)
+        models_dict['random_forest'] = grid_rf.best_estimator_
+
+        # Feature importance from Random Forest
+        importances = grid_rf.best_estimator_.feature_importances_
+        fi = sorted(zip(final_feature_names, importances.tolist()), key=lambda x: x[1], reverse=True)
+        results['random_forest']['feature_importance'] = [{'feature': f, 'importance': round(v,4)} for f,v in fi]
+
+        update_state(progress=95, message='Saving model binary & JSON performance metrics...')
 
         # Save all pipeline components
-        print("\nSaving pipeline components...")
         with open('models/trained_models.pkl', 'wb') as f:
             pickle.dump({
                 'models': models_dict,
@@ -388,20 +490,67 @@ def train():
         with open('results/training_results.json', 'w') as f:
             json.dump(results_data, f, indent=2)
 
-        print("\n" + "="*60)
-        print("TRAINING COMPLETED SUCCESSFULLY")
-        print("="*60 + "\n")
-
-        return jsonify({
-            'status': 'success',
-            'message': 'All models trained successfully',
-            'results': results
-        }), 200
+        update_state(status='success', progress=100, message='All models trained successfully!', results=results)
 
     except Exception as e:
-        print(f"\n[ERROR]: {str(e)}")
+        print(f"\n[THREAD ERROR]: {str(e)}")
         import traceback; traceback.print_exc()
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        update_state(status='error', progress=100, message=f'Error occurred: {str(e)}', error_message=str(e))
+
+
+@app.route('/api/train', methods=['POST'])
+def train():
+    # Check if already training
+    with training_lock:
+        if training_state['status'] == 'training':
+            return jsonify({
+                'status': 'error',
+                'message': 'Training is already in progress. Please wait for it to complete.'
+            }), 400
+
+    # Handle optional CSV file upload
+    filepath = None
+    if 'file' in request.files:
+        file = request.files['file']
+        if file and file.filename != '':
+            if not file.filename.endswith('.csv'):
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Invalid file format. Only CSV files are accepted.'
+                }), 400
+            
+            filename = secure_filename(file.filename)
+            filepath = os.path.join('uploads', f"uploaded_{int(datetime.now().timestamp())}_{filename}")
+            file.save(filepath)
+
+    # Launch background thread
+    t = threading.Thread(target=run_training_thread, args=(filepath,))
+    t.daemon = True
+    t.start()
+
+    return jsonify({
+        'status': 'training',
+        'message': 'Model training has started in the background.'
+    }), 202
+
+
+@app.route('/api/train/status', methods=['GET'])
+def train_status():
+    with training_lock:
+        return jsonify(training_state.copy()), 200
+
+
+@app.route('/api/train/reset', methods=['POST'])
+def train_reset():
+    with training_lock:
+        if training_state['status'] == 'training':
+            return jsonify({'status': 'error', 'message': 'Cannot reset while training is in progress.'}), 400
+        training_state['status'] = 'idle'
+        training_state['progress'] = 0
+        training_state['message'] = 'System is ready for training.'
+        training_state['error_message'] = None
+        training_state['results'] = None
+    return jsonify({'status': 'success', 'message': 'Training state reset successfully.'}), 200
 
 
 @app.route('/api/predict', methods=['POST'])
@@ -413,7 +562,7 @@ def predict():
         data = request.json
 
         with open('models/trained_models.pkl', 'rb') as f:
-            pipeline = pickle.load(f)
+            pipeline = pipeline = pickle.load(f)
 
         models_dict  = pipeline['models']
         medians      = pipeline['medians']
@@ -501,4 +650,5 @@ if __name__ == '__main__':
     print("\nServer: http://localhost:5000")
     print("="*60 + "\n")
     app.run(debug=True, host='0.0.0.0', port=5000)
+
     

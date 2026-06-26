@@ -15,6 +15,36 @@
             </button>
             <a href="/results" class="btn btn-secondary">View Results →</a>
         </div>
+
+        <!-- Premium Drag & Drop CSV Upload Area -->
+        <div class="upload-container">
+            <div class="upload-zone" id="dropZone" onclick="triggerFileInput()">
+                <span class="upload-icon">⇪</span>
+                <p class="upload-text">Drag & drop custom logistics CSV here or <span class="upload-browse">browse files</span></p>
+                <p class="upload-hint">CSV must contain delivery features and 'delivery_outcome'</p>
+                <input type="file" id="csvFileInput" accept=".csv" class="hidden-input" onchange="handleFileSelect(event)">
+            </div>
+            <div class="file-info-bar hidden" id="fileInfoBar">
+                <div class="file-info-left">
+                    <span class="file-icon">📊</span>
+                    <span class="file-name" id="selectedFileName">dataset.csv</span>
+                    <span class="file-size" id="selectedFileSize">0 KB</span>
+                </div>
+                <button class="btn-clear" onclick="clearSelectedFile(event)" title="Remove file">✕</button>
+            </div>
+        </div>
+
+        <!-- Dynamic Progress Bar -->
+        <div id="trainProgressWrap" class="progress-wrap hidden">
+            <div class="progress-bar-container">
+                <div id="trainProgressBar" class="progress-bar" style="width: 0%"></div>
+            </div>
+            <div class="progress-meta">
+                <span id="progressPercent" class="progress-percent">0%</span>
+                <span id="progressStep" class="progress-step">Initializing...</span>
+            </div>
+        </div>
+
         <div id="trainStatus" class="train-status hidden"></div>
     </div>
 </section>
@@ -155,33 +185,211 @@
 
 {% block extra_js %}
 <script>
+let selectedFile = null;
+let pollingInterval = null;
+
+// Drag and drop handlers
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('csvFileInput');
+const fileInfoBar = document.getElementById('fileInfoBar');
+const selectedFileName = document.getElementById('selectedFileName');
+const selectedFileSize = document.getElementById('selectedFileSize');
+
+// Prevent default behaviors
+['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+    dropZone.addEventListener(eventName, preventDefaults, false);
+});
+
+function preventDefaults(e) {
+    e.preventDefault();
+    e.stopPropagation();
+}
+
+// Visual feedback on dragover
+['dragenter', 'dragover'].forEach(eventName => {
+    dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover'), false);
+});
+['dragleave', 'drop'].forEach(eventName => {
+    dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false);
+});
+
+// Drop handler
+dropZone.addEventListener('drop', handleDrop, false);
+
+function handleDrop(e) {
+    const dt = e.dataTransfer;
+    const files = dt.files;
+    if (files.length) {
+        processFile(files[0]);
+    }
+}
+
+// Trigger file input
+function triggerFileInput() {
+    fileInput.click();
+}
+
+function handleFileSelect(e) {
+    const files = e.target.files;
+    if (files.length) {
+        processFile(files[0]);
+    }
+}
+
+function processFile(file) {
+    if (!file.name.endsWith('.csv')) {
+        alert('Invalid file format. Please upload a .csv file.');
+        return;
+    }
+    selectedFile = file;
+    selectedFileName.textContent = file.name;
+    selectedFileSize.textContent = formatBytes(file.size);
+    
+    dropZone.classList.add('hidden');
+    fileInfoBar.classList.remove('hidden');
+}
+
+function clearSelectedFile(e) {
+    if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+    selectedFile = null;
+    fileInput.value = '';
+    
+    fileInfoBar.classList.add('hidden');
+    dropZone.classList.remove('hidden');
+}
+
+function formatBytes(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
 async function trainModels() {
     const btn = document.getElementById('trainBtn');
     const status = document.getElementById('trainStatus');
+    const progressWrap = document.getElementById('trainProgressWrap');
+    const progressBar = document.getElementById('trainProgressBar');
+    const progressPercent = document.getElementById('progressPercent');
+    const progressStep = document.getElementById('progressStep');
 
     btn.disabled = true;
-    btn.innerHTML = '<span class="btn-icon">⟳</span> Training...';
-    status.className = 'train-status info';
-    status.textContent = 'Generating dataset and training 3 models with GridSearchCV. This may take 2–5 minutes...';
+    btn.innerHTML = '<span class="btn-icon">⟳</span> Initiating...';
+    
+    // Clear and hide status
+    status.className = 'train-status hidden';
+    status.textContent = '';
+    
+    // Show progress wrap
+    progressWrap.classList.remove('hidden');
+    progressBar.style.width = '0%';
+    progressPercent.textContent = '0%';
+    progressStep.textContent = 'Contacting server...';
+
+    // Prepare payload
+    const formData = new FormData();
+    if (selectedFile) {
+        formData.append('file', selectedFile);
+    }
 
     try {
-        const res = await fetch('/api/train', { method: 'POST' });
+        const res = await fetch('/api/train', {
+            method: 'POST',
+            body: selectedFile ? formData : undefined
+        });
+        
         const data = await res.json();
-
-        if (data.status === 'success') {
-            status.className = 'train-status success';
-            const rf = data.results.random_forest;
-            status.innerHTML = `✓ Training complete — Random Forest accuracy: <strong>${(rf.accuracy * 100).toFixed(1)}%</strong>, F1: <strong>${rf.f1.toFixed(3)}</strong>. <a href="/results">View full results →</a>`;
-            btn.innerHTML = '<span class="btn-icon">✓</span> Trained';
+        
+        if (res.status === 202 || data.status === 'training') {
+            // Started successfully! Start polling.
+            startPolling();
         } else {
-            throw new Error(data.message);
+            throw new Error(data.message || 'Failed to start training.');
         }
     } catch (err) {
+        // Show error immediately
+        progressWrap.classList.add('hidden');
         status.className = 'train-status error';
         status.textContent = '✗ Error: ' + err.message;
         btn.disabled = false;
         btn.innerHTML = '<span class="btn-icon">⚙</span> Retry Training';
     }
 }
+
+function startPolling() {
+    const btn = document.getElementById('trainBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="btn-icon">⟳</span> Training...';
+    
+    if (pollingInterval) clearInterval(pollingInterval);
+    
+    pollingInterval = setInterval(pollStatus, 1000);
+}
+
+async function pollStatus() {
+    const btn = document.getElementById('trainBtn');
+    const status = document.getElementById('trainStatus');
+    const progressWrap = document.getElementById('trainProgressWrap');
+    const progressBar = document.getElementById('trainProgressBar');
+    const progressPercent = document.getElementById('progressPercent');
+    const progressStep = document.getElementById('progressStep');
+
+    try {
+        const res = await fetch('/api/train/status');
+        const data = await res.json();
+        
+        if (data.status === 'training') {
+            progressBar.style.width = data.progress + '%';
+            progressPercent.textContent = data.progress + '%';
+            progressStep.textContent = data.message;
+        } else if (data.status === 'success') {
+            clearInterval(pollingInterval);
+            progressBar.style.width = '100%';
+            progressPercent.textContent = '100%';
+            progressStep.textContent = 'Training completed!';
+            
+            status.className = 'train-status success';
+            const rf = data.results.random_forest;
+            status.innerHTML = `✓ Training complete — Random Forest accuracy: <strong>${(rf.accuracy * 100).toFixed(1)}%</strong>, F1: <strong>${rf.f1.toFixed(3)}</strong>. <a href="/results">View full results →</a>`;
+            btn.innerHTML = '<span class="btn-icon">✓</span> Trained';
+            
+            // Clean up file select
+            clearSelectedFile();
+        } else if (data.status === 'error') {
+            clearInterval(pollingInterval);
+            progressWrap.classList.add('hidden');
+            
+            status.className = 'train-status error';
+            status.textContent = '✗ Training failed: ' + (data.error_message || data.message);
+            btn.disabled = false;
+            btn.innerHTML = '<span class="btn-icon">⚙</span> Retry Training';
+            
+            // Reset backend state
+            await fetch('/api/train/reset', { method: 'POST' });
+        }
+    } catch (err) {
+        console.error('Polling error:', err);
+    }
+}
+
+// On page load, check if training is already in progress
+async function checkOngoingTraining() {
+    try {
+        const res = await fetch('/api/train/status');
+        const data = await res.json();
+        if (data.status === 'training') {
+            document.getElementById('trainProgressWrap').classList.remove('hidden');
+            startPolling();
+        }
+    } catch (e) {
+        console.warn('Failed to check ongoing training:', e);
+    }
+}
+
+checkOngoingTraining();
 </script>
-{% endblock %}
+{% endblock %}
