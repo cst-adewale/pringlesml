@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}About{% endblock %}
+
+{% block content %}
+
+<section class="page-header">
+    <div class="page-header-inner">
+        <h1 class="page-title">About This Project</h1>
+        <p class="page-sub">Research-based software implementation of a B.Sc. Computer Science thesis at Caleb University, Lagos.</p>
+    </div>
+</section>
+
+<section class="section">
+    <div class="section-inner about-layout">
+
+        <div class="about-main">
+
+            <div class="about-block">
+                <h2 class="about-heading">Research Problem</h2>
+                <p>Nigerian e-commerce has grown rapidly between 2020 and 2026, driven by platforms like Jumia and Konga. However, last-mile delivery infrastructure has not kept pace. The result is a persistent pattern of delivery failures, delays, and SLA breaches — estimated at 25% delays, 15% failures, and 35% SLA breaches nationally.</p>
+                <p>This software implements a predictive system that classifies delivery outcomes before the rider leaves the depot, enabling logistics operators to intervene proactively rather than reactively.</p>
+            </div>
+
+            <div class="about-block">
+                <h2 class="about-heading">Research Objectives</h2>
+                <ul class="about-list">
+                    <li>Identify key operational and environmental variables influencing delivery outcomes in Nigerian e-commerce</li>
+                    <li>Develop and compare three supervised classification models: Logistic Regression, Decision Tree, and Random Forest</li>
+                    <li>Evaluate model performance using accuracy, precision, recall, F1-score, and confusion matrices</li>
+                    <li>Identify the most predictive features via feature importance analysis</li>
+                    <li>Implement a working prediction system for operational use</li>
+                </ul>
+            </div>
+
+            <div class="about-block">
+                <h2 class="about-heading">Dataset</h2>
+                <p>The dataset consists of 10,000 synthetic delivery records generated using parameters calibrated to Nigerian logistics literature (2020–2026). It combines characteristics from public datasets with simulation techniques to reflect real-world conditions including Lagos traffic patterns, informal addressing systems, seasonal flooding, and motorcycle-dependent fleets.</p>
+                <div class="about-table-wrap">
+                    <table class="about-table">
+                        <thead>
+                            <tr><th>Class</th><th>Label</th><th>Distribution</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>0</td><td>Success</td><td>~68.5%</td></tr>
+                            <tr><td>1</td><td>Delayed</td><td>~21.5%</td></tr>
+                            <tr><td>2</td><td>Failed</td><td>~10.0%</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="about-block">
+                <h2 class="about-heading">Methodology</h2>
+                <p>The research follows a five-phase methodology: data collection and generation, preprocessing and feature engineering, exploratory data analysis, model development with hyperparameter tuning, and evaluation. Data is split 70% training, 15% validation, 15% test with stratified sampling to maintain class distribution. GridSearchCV with 5-fold stratified cross-validation is used for hyperparameter optimisation, with F1-macro as the scoring metric to account for class imbalance.</p>
+            </div>
+
+            <div class="about-block">
+                <h2 class="about-heading">Technologies</h2>
+                <div class="tech-grid">
+                    <div class="tech-item">
+                        <span class="tech-name">Python 3.14</span>
+                        <span class="tech-role">Core language</span>
+                    </div>
+                    <div class="tech-item">
+                        <span class="tech-name">scikit-learn 1.9</span>
+                        <span class="tech-role">ML models & evaluation</span>
+                    </div>
+                    <div class="tech-item">
+                        <span class="tech-name">pandas / numpy</span>
+                        <span class="tech-role">Data manipulation</span>
+                    </div>
+                    <div class="tech-item">
+                        <span class="tech-name">Flask 3.0</span>
+                        <span class="tech-role">Web framework</span>
+                    </div>
+                    <div class="tech-item">
+                        <span class="tech-name">HTML / CSS / JS</span>
+                        <span class="tech-role">Frontend interface</span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <div class="about-sidebar">
+
+            <div class="sidebar-card">
+                <div class="sidebar-label">Institution</div>
+                <div class="sidebar-value">Caleb University, Lagos</div>
+            </div>
+
+            <div class="sidebar-card">
+                <div class="sidebar-label">Programme</div>
+                <div class="sidebar-value">B.Sc. Computer Science</div>
+            </div>
+
+            <div class="sidebar-card">
+                <div class="sidebar-label">Research Area</div>
+                <div class="sidebar-value">Machine Learning · Logistics · E-Commerce</div>
+            </div>
+
+            <div class="sidebar-card">
+                <div class="sidebar-label">Thesis Title</div>
+                <div class="sidebar-value">Modeling Delivery Outcomes in Nigerian E-Commerce Using Data-Driven Methods</div>
+            </div>
+
+            <div class="sidebar-card">
+                <div class="sidebar-label">Scope</div>
+                <div class="sidebar-value">Lagos-centric · 2020–2026</div>
+            </div>
+
+            <div class="sidebar-card sidebar-links">
+                <div class="sidebar-label">Navigation</div>
+                <a href="/" class="sidebar-link">→ Dashboard</a>
+                <a href="/results" class="sidebar-link">→ Model Results</a>
+                <a href="/predict" class="sidebar-link">→ Make Prediction</a>
+            </div>
+
+        </div>
+
+    </div>
+</section>
+
+{% endblock %}

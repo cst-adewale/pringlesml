@@ -9,7 +9,7 @@ import pickle
 import numpy as np
 import pandas as pd
 from datetime import datetime
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.model_selection import train_test_split, GridSearchCV, StratifiedKFold
 from sklearn.linear_model import LogisticRegression
@@ -181,6 +181,26 @@ def train_all_models(X_train, X_val, y_train, y_val, X_test, y_test, feature_nam
     print(f"   Accuracy: {results['random_forest']['accuracy']:.4f}  F1: {results['random_forest']['f1']:.4f}")
 
     return results, models_dict
+
+# ============================================================================
+# HTML PAGE ROUTES
+# ============================================================================
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/results')
+def results():
+    return render_template('results.html')
+
+@app.route('/predict')
+def predict_page():
+    return render_template('predict.html')
+
+@app.route('/about')
+def about():
+    return render_template('about.html')
 
 
 # ============================================================================
