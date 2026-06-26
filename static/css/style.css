@@ -18,8 +18,8 @@
     --danger:       #ff5f5f;
     --warning:      #f5a623;
     --success:      #00e5a0;
-    --mono:         'IBM Plex Mono', monospace;
-    --sans:         'Inter', sans-serif;
+    --mono:         'Poppins', sans-serif;
+    --sans:         'Poppins', sans-serif;
     --radius:       6px;
     --radius-lg:    12px;
 }

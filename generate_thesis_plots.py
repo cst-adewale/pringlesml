@@ -5,6 +5,7 @@ calibrated to the Caleb University research proposal.
 """
 
 import os
+import json
 import pickle
 import numpy as np
 import pandas as pd
@@ -17,7 +18,8 @@ from sklearn.preprocessing import label_binarize
 # Set academic styling
 sns.set_theme(style="whitegrid")
 plt.rcParams.update({
-    'font.family': 'serif',
+    'font.family': 'sans-serif',
+    'font.sans-serif': ['Poppins', 'DejaVu Sans', 'Arial', 'Helvetica', 'sans-serif'],
     'font.size': 11,
     'axes.labelsize': 12,
     'axes.titlesize': 13,
