@@ -5,9 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}DeliveryML{% endblock %} — Nigerian E-Commerce Prediction</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     {% block extra_css %}{% endblock %}
+    <script>
+        // Apply saved theme before render to avoid flash
+        (function() {
+            if (localStorage.getItem('theme') === 'light') {
+                document.documentElement.classList.add('preload-light');
+            }
+        })();
+    </script>
+    <style>
+        .preload-light body { background: #f8f9fa !important; }
+    </style>
 </head>
 <body>
 
@@ -21,8 +32,13 @@
             <ul class="nav-links">
                 <li><a href="/" class="nav-link {% if request.endpoint == 'index' %}active{% endif %}">Dashboard</a></li>
                 <li><a href="/results" class="nav-link {% if request.endpoint == 'results' %}active{% endif %}">Results</a></li>
-                <li><a href="/predict" class="nav-link {% if request.endpoint == 'predict' %}active{% endif %}">Predict</a></li>
+                <li><a href="/predict" class="nav-link {% if request.endpoint == 'predict_page' %}active{% endif %}">Predict</a></li>
                 <li><a href="/about" class="nav-link {% if request.endpoint == 'about' %}active{% endif %}">About</a></li>
+                <li>
+                    <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle light/dark mode">
+                        <span id="themeIcon">☀</span>
+                    </button>
+                </li>
             </ul>
         </div>
     </nav>
@@ -42,5 +58,28 @@
 
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
     {% block extra_js %}{% endblock %}
+
+    <script>
+        // Apply saved theme on load
+        function applyTheme(theme) {
+            if (theme === 'light') {
+                document.body.classList.add('light');
+                document.getElementById('themeIcon').textContent = '☾';
+            } else {
+                document.body.classList.remove('light');
+                document.getElementById('themeIcon').textContent = '☀';
+            }
+        }
+
+        function toggleTheme() {
+            const isLight = document.body.classList.contains('light');
+            const next = isLight ? 'dark' : 'light';
+            localStorage.setItem('theme', next);
+            applyTheme(next);
+        }
+
+        // Init
+        applyTheme(localStorage.getItem('theme') || 'dark');
+    </script>
 </body>
 </html>
