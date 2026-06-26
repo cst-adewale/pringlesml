@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 from datetime import datetime
 from flask import Flask, request, jsonify, render_template
-from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.model_selection import train_test_split, GridSearchCV, StratifiedKFold
 from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
@@ -27,7 +27,7 @@ os.makedirs('results', exist_ok=True)
 
 
 # ============================================================================
-# DATA GENERATION
+# DATA GENERATION (CALIBRATED TO THESIS SPECIFICATIONS)
 # ============================================================================
 
 def generate_dataset(n_samples=10000):
@@ -52,57 +52,142 @@ def generate_dataset(n_samples=10000):
         n_samples, p=[0.14,0.14,0.14,0.14,0.15,0.15,0.14])
     data['season'] = np.random.choice(['dry','rainy'], n_samples, p=[0.55,0.45])
 
-    # Generate outcomes using deterministic risk score + small noise
-    # Strong feature-outcome signal => high model accuracy
-    outcomes = []
+    # Generate continuous risk score
+    risks = []
     for i in range(n_samples):
         risk = 0.0
-
         # Distance (weight 0.25)
         risk += (data['delivery_distance_km'][i] / 50.0) * 0.25
-
         # Traffic (weight 0.20)
         risk += ((data['traffic_level'][i] - 1) / 4.0) * 0.20
-
         # Location (weight 0.15)
         loc_risk = {'island': 0.1, 'mainland': 0.3, 'suburban': 0.5, 'rural': 0.9}
         risk += loc_risk[data['location_type'][i]] * 0.15
-
         # Time of day (weight 0.15)
         tod_risk = {'early_morning': 0.1, 'morning': 0.2, 'afternoon': 0.3, 'evening': 0.7, 'night': 0.9}
         risk += tod_risk[data['time_of_day'][i]] * 0.15
-
         # Address quality (weight 0.10)
         risk += ((data['address_quality_score'][i] - 1) / 4.0) * 0.10
-
         # Rider experience - protective (weight 0.10)
         risk -= (data['rider_experience_months'][i] / 120.0) * 0.10
-
         # Weather (weight 0.05)
         wth_risk = {'clear': 0.0, 'humid': 0.4, 'rainy': 0.9}
         risk += wth_risk[data['weather_condition'][i]] * 0.05
-
         # Season (weight 0.05)
         risk += (0.7 if data['season'][i] == 'rainy' else 0.0) * 0.05
-
         # Order size (weight 0.05)
         risk += (data['order_size_kg'][i] / 20.0) * 0.05
-
-        # Add small noise
+        # Add noise
         risk = float(np.clip(risk + np.random.normal(0, 0.02), 0.0, 1.0))
+        risks.append(risk)
 
-        # Map to outcome: success ~68.5%, delayed ~21.5%, failed ~10%
-        if risk < 0.4035:
+    risks = np.array(risks)
+    
+    # Recalibrate thresholds using percentiles to achieve exact thesis distribution:
+    # 68.5% success, 21.5% delayed, 10.0% failed
+    p68_5 = np.percentile(risks, 68.5)
+    p90 = np.percentile(risks, 90.0)
+
+    outcomes = []
+    for r in risks:
+        if r < p68_5:
             outcomes.append('success')
-        elif risk < 0.4927:
+        elif r < p90:
             outcomes.append('delayed')
         else:
             outcomes.append('failed')
 
     data['delivery_outcome'] = outcomes
     df = pd.DataFrame(data)
+
+    # Artificially introduce a tiny amount of missing values (1%) to demonstrate pipeline compliance
+    mask_rider = np.random.rand(n_samples) < 0.01
+    mask_weather = np.random.rand(n_samples) < 0.01
+    df.loc[mask_rider, 'rider_experience_months'] = np.nan
+    df.loc[mask_weather, 'weather_condition'] = np.nan
+
     df.to_csv('results/dataset.csv', index=False)
     return df
+
+
+# ============================================================================
+# METHODOLOGICAL PIPELINE STEPS
+# ============================================================================
+
+def impute_missing_values(df, training_medians=None, training_modes=None):
+    """
+    Imputes missing values using Median for numeric features and Mode for categorical features.
+    """
+    df_clean = df.copy()
+    
+    # Identify numeric and categorical columns
+    numeric_cols = ['delivery_distance_km', 'order_size_kg', 'rider_experience_months']
+    categorical_cols = ['time_of_day', 'location_type', 'weather_condition', 'day_of_week', 'season']
+
+    # Dicts to store fitted imputation parameters during training
+    medians = {}
+    modes = {}
+
+    for col in numeric_cols:
+        if col in df_clean.columns:
+            fill_val = training_medians[col] if training_medians is not None else df_clean[col].median()
+            medians[col] = fill_val
+            df_clean[col] = df_clean[col].fillna(fill_val)
+
+    for col in categorical_cols:
+        if col in df_clean.columns:
+            fill_val = training_modes[col] if training_modes is not None else df_clean[col].mode()[0]
+            modes[col] = fill_val
+            df_clean[col] = df_clean[col].fillna(fill_val)
+
+    return df_clean, medians, modes
+
+
+def treat_outliers(df, training_bounds=None):
+    """
+    Detects outliers using the Interquartile Range (IQR) method and caps them (Winsorization).
+    """
+    df_clean = df.copy()
+    outlier_cols = ['delivery_distance_km', 'order_size_kg']
+    bounds = {}
+
+    for col in outlier_cols:
+        if col in df_clean.columns:
+            if training_bounds is not None:
+                lower_bound, upper_bound = training_bounds[col]
+            else:
+                q1 = df_clean[col].quantile(0.25)
+                q3 = df_clean[col].quantile(0.75)
+                iqr = q3 - q1
+                lower_bound = q1 - 1.5 * iqr
+                upper_bound = q3 + 1.5 * iqr
+            
+            bounds[col] = (lower_bound, upper_bound)
+            df_clean[col] = np.clip(df_clean[col], lower_bound, upper_bound)
+
+    return df_clean, bounds
+
+
+def engineer_features(df):
+    """
+    Creates the four derived features specified in Chapter Three.
+    """
+    df_eng = df.copy()
+    
+    # 1. Distance-traffic interaction
+    df_eng['distance_traffic_interaction'] = df_eng['delivery_distance_km'] * df_eng['traffic_level']
+
+    # 2. Time risk category (evening and night periods)
+    df_eng['time_risk_category'] = df_eng['time_of_day'].isin(['evening', 'night']).astype(int)
+
+    # 3. Zone risk score (location mapping + address quality score)
+    loc_mapping = {'island': 1, 'mainland': 2, 'suburban': 3, 'rural': 4}
+    df_eng['zone_risk_score'] = df_eng['location_type'].map(loc_mapping) + df_eng['address_quality_score']
+
+    # 4. Seasonal disruption indicator (rainy season flag)
+    df_eng['seasonal_disruption_indicator'] = (df_eng['season'] == 'rainy').astype(int)
+
+    return df_eng
 
 
 # ============================================================================
@@ -214,58 +299,90 @@ def train():
         print("STARTING MODEL TRAINING")
         print("="*60)
 
-        # Step 1: Generate data
-        print("\n[1/4] Generating dataset...")
+        # Step 1: Generate data (with calibrated thresholds & artificial NaNs)
+        print("\n[1/5] Generating dataset...")
         df = generate_dataset(10000)
-        print(f"✓ Generated {len(df)} records")
+        print(f"  SUCCESS: Generated {len(df)} records")
         print(f"  Class distribution: {df['delivery_outcome'].value_counts().to_dict()}")
 
-        # Step 2: Preprocess
-        print("\n[2/4] Preprocessing data...")
-        feature_cols = [c for c in df.columns if c != 'delivery_outcome']
-        X = df[feature_cols].copy()
-        y = df['delivery_outcome'].copy()
+        # Step 2: Imputation & Outlier Treatment
+        print("\n[2/5] Performing preprocessing pipeline...")
+        df_imputed, medians, modes = impute_missing_values(df)
+        print("  SUCCESS: Missing values imputed (median for numeric, mode for categorical)")
+        df_treated, bounds = treat_outliers(df_imputed)
+        print("  SUCCESS: Outliers treated using IQR Winsorization")
 
-        label_encoders = {}
-        for col in X.select_dtypes(include=['object']).columns:
-            le = LabelEncoder()
-            X[col] = le.fit_transform(X[col])
-            label_encoders[col] = le
+        # Step 3: Feature Engineering
+        print("\n[3/5] Engineering derived features...")
+        df_features = engineer_features(df_treated)
+        print("  SUCCESS: Added distance_traffic_interaction, time_risk_category, zone_risk_score, seasonal_disruption_indicator")
 
+        # Step 4: Encoding & Scaling
+        print("\n[4/5] Encoding categorical features and scaling numeric features...")
+        y = df_features['delivery_outcome'].copy()
+        X_raw = df_features.drop(columns=['delivery_outcome'])
+
+        # Separate nominal, ordinal, and numeric columns
+        nominal_cols = ['time_of_day', 'location_type', 'weather_condition', 'day_of_week', 'season']
+        numeric_cols = [
+            'delivery_distance_km', 'traffic_level', 'order_size_kg', 
+            'rider_experience_months', 'address_quality_score',
+            'distance_traffic_interaction', 'time_risk_category', 
+            'zone_risk_score', 'seasonal_disruption_indicator'
+        ]
+
+        # One-Hot Encode nominal variables
+        encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
+        X_nominal_encoded = encoder.fit_transform(X_raw[nominal_cols])
+        nominal_feature_names = encoder.get_feature_names_out(nominal_cols).tolist()
+        
+        # Reconstruct DataFrame with engineered and encoded columns
+        X_encoded_df = pd.DataFrame(X_nominal_encoded, columns=nominal_feature_names)
+        X_numeric_df = X_raw[numeric_cols].reset_index(drop=True)
+        
+        X_final = pd.concat([X_numeric_df, X_encoded_df], axis=1)
+        final_feature_names = X_final.columns.tolist()
+
+        # Standardize all features
         scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(X)
-        X = pd.DataFrame(X_scaled, columns=feature_cols)
+        X_scaled = scaler.fit_transform(X_final)
+        X = pd.DataFrame(X_scaled, columns=final_feature_names)
 
-        # Step 3: Split 70/15/15
+        # Split 70/15/15 with stratification
         X_temp, X_test, y_temp, y_test = train_test_split(
             X, y, test_size=0.15, random_state=42, stratify=y)
         X_train, X_val, y_train, y_val = train_test_split(
             X_temp, y_temp, test_size=0.176, random_state=42, stratify=y_temp)
-        print(f"✓ Train: {len(X_train)}  Val: {len(X_val)}  Test: {len(X_test)}")
+        print(f"  SUCCESS: Train: {len(X_train)}  Val: {len(X_val)}  Test: {len(X_test)}")
 
-        # Step 4: Train
-        print("\n[3/4] Training models with GridSearchCV (5-fold CV)...")
+        # Step 5: Train Models
+        print("\n[5/5] Training models with GridSearchCV (5-fold CV)...")
         results, models_dict = train_all_models(
-            X_train, X_val, y_train, y_val, X_test, y_test, feature_cols)
+            X_train, X_val, y_train, y_val, X_test, y_test, final_feature_names)
 
-        # Step 5: Save
-        print("\n[4/4] Saving models and results...")
+        # Save all pipeline components
+        print("\nSaving pipeline components...")
         with open('models/trained_models.pkl', 'wb') as f:
             pickle.dump({
                 'models': models_dict,
-                'label_encoders': label_encoders,
+                'medians': medians,
+                'modes': modes,
+                'bounds': bounds,
+                'encoder': encoder,
                 'scaler': scaler,
-                'feature_names': feature_cols
+                'nominal_cols': nominal_cols,
+                'numeric_cols': numeric_cols,
+                'feature_names': final_feature_names
             }, f)
 
         results_data = {
             'timestamp': datetime.now().isoformat(),
             'dataset_info': {
                 'n_samples': len(df),
-                'n_features': len(feature_cols),
+                'n_features': len(final_feature_names),
                 'class_distribution': df['delivery_outcome'].value_counts().to_dict()
             },
-            'feature_names': feature_cols,
+            'feature_names': final_feature_names,
             'models': results
         }
         with open('results/training_results.json', 'w') as f:
@@ -282,7 +399,7 @@ def train():
         }), 200
 
     except Exception as e:
-        print(f"\n✗ ERROR: {str(e)}")
+        print(f"\n[ERROR]: {str(e)}")
         import traceback; traceback.print_exc()
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
@@ -291,43 +408,53 @@ def train():
 def predict():
     """
     POST /api/predict
-    Input:
-    {
-        "delivery_distance_km": 8.5,
-        "traffic_level": 3,
-        "time_of_day": "afternoon",
-        "location_type": "mainland",
-        "order_size_kg": 2.5,
-        "weather_condition": "clear",
-        "rider_experience_months": 24,
-        "address_quality_score": 2,
-        "day_of_week": "wednesday",
-        "season": "dry"
-    }
     """
     try:
         data = request.json
 
         with open('models/trained_models.pkl', 'rb') as f:
-            model_data = pickle.load(f)
+            pipeline = pickle.load(f)
 
-        models_dict    = model_data['models']
-        label_encoders = model_data['label_encoders']
-        scaler         = model_data['scaler']
-        feature_names  = model_data['feature_names']
+        models_dict  = pipeline['models']
+        medians      = pipeline['medians']
+        modes        = pipeline['modes']
+        bounds       = pipeline['bounds']
+        encoder      = pipeline['encoder']
+        scaler       = pipeline['scaler']
+        nominal_cols = pipeline['nominal_cols']
+        numeric_cols = pipeline['numeric_cols']
+        feature_names = pipeline['feature_names']
 
-        X = pd.DataFrame([data])[feature_names]
-        for col, le in label_encoders.items():
-            if col in X.columns:
-                X[col] = le.transform(X[col])
+        # Convert input dictionary to DataFrame
+        X_input = pd.DataFrame([data])
 
-        X_scaled = scaler.transform(X)
-        X = pd.DataFrame(X_scaled, columns=feature_names)
+        # 1. Imputation
+        X_imputed, _, _ = impute_missing_values(X_input, training_medians=medians, training_modes=modes)
 
+        # 2. Outlier Treatment
+        X_treated, _ = treat_outliers(X_imputed, training_bounds=bounds)
+
+        # 3. Feature Engineering
+        X_features = engineer_features(X_treated)
+
+        # 4. Encoding Nominal Columns
+        X_nominal_encoded = encoder.transform(X_features[nominal_cols])
+        nominal_feature_names = encoder.get_feature_names_out(nominal_cols).tolist()
+        X_encoded_df = pd.DataFrame(X_nominal_encoded, columns=nominal_feature_names)
+        
+        # Combine numeric and encoded columns
+        X_numeric_df = X_features[numeric_cols].reset_index(drop=True)
+        X_final = pd.concat([X_numeric_df, X_encoded_df], axis=1)
+
+        # 5. Scaling
+        X_scaled = scaler.transform(X_final)
+        X_scaled_df = pd.DataFrame(X_scaled, columns=feature_names)
+
+        # Generate predictions across models
         predictions = {}
         for name, model in models_dict.items():
-            pred  = model.predict(X)[0]
-            proba = model.predict_proba(X)[0]
+            pred  = model.predict(X_scaled_df)[0]
+            proba = model.predict_proba(X_scaled_df)[0]
             predictions[name] = {
                 'prediction': pred,
                 'confidence': float(max(proba)),
@@ -374,4 +501,3 @@ if __name__ == '__main__':
     print("\nServer: http://localhost:5000")
     print("="*60 + "\n")
     app.run(debug=True, host='0.0.0.0', port=5000)
-    

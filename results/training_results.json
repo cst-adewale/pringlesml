@@ -1,47 +1,67 @@
 {
-  "timestamp": "2026-06-26T10:19:34.113490",
+  "timestamp": "2026-06-26T11:38:16.240748",
   "dataset_info": {
     "n_samples": 10000,
-    "n_features": 10,
+    "n_features": 30,
     "class_distribution": {
-      "success": 8267,
-      "delayed": 1406,
-      "failed": 327
+      "success": 6850,
+      "delayed": 2150,
+      "failed": 1000
     }
   },
   "feature_names": [
     "delivery_distance_km",
     "traffic_level",
-    "time_of_day",
-    "location_type",
     "order_size_kg",
-    "weather_condition",
     "rider_experience_months",
     "address_quality_score",
-    "day_of_week",
-    "season"
+    "distance_traffic_interaction",
+    "time_risk_category",
+    "zone_risk_score",
+    "seasonal_disruption_indicator",
+    "time_of_day_afternoon",
+    "time_of_day_early_morning",
+    "time_of_day_evening",
+    "time_of_day_morning",
+    "time_of_day_night",
+    "location_type_island",
+    "location_type_mainland",
+    "location_type_rural",
+    "location_type_suburban",
+    "weather_condition_clear",
+    "weather_condition_humid",
+    "weather_condition_rainy",
+    "day_of_week_friday",
+    "day_of_week_monday",
+    "day_of_week_saturday",
+    "day_of_week_sunday",
+    "day_of_week_thursday",
+    "day_of_week_tuesday",
+    "day_of_week_wednesday",
+    "season_dry",
+    "season_rainy"
   ],
   "models": {
     "logistic_regression": {
-      "accuracy": 0.862,
-      "precision": 0.6769950195365869,
-      "recall": 0.5466168656730388,
-      "f1": 0.5844340173076231,
+      "accuracy": 0.9233333333333333,
+      "precision": 0.8925498200063883,
+      "recall": 0.8827253290834433,
+      "f1": 0.8873864153485961,
       "confusion_matrix": [
         [
-          1185,
-          55,
+          988,
+          39,
           0
         ],
         [
-          106,
-          97,
-          8
+          40,
+          269,
+          14
         ],
         [
-          11,
-          27,
-          11
+          0,
+          22,
+          128
         ]
       ],
       "per_class": {
@@ -51,89 +71,43 @@
           "failed"
         ],
         "precision": [
-          0.9101382488479263,
-          0.5418994413407822,
-          0.5789473684210527
+          0.9610894941634242,
+          0.8151515151515152,
+          0.9014084507042254
         ],
         "recall": [
-          0.9556451612903226,
-          0.4597156398104265,
-          0.22448979591836735
+          0.9620253164556962,
+          0.8328173374613003,
+          0.8533333333333334
         ],
         "f1": [
-          0.932336742722266,
-          0.49743589743589745,
-          0.3235294117647059
+          0.9615571776155718,
+          0.8238897396630934,
+          0.8767123287671232
         ]
       },
       "best_params": "{'C': 10.0}"
     },
     "decision_tree": {
-      "accuracy": 0.84,
-      "precision": 0.6275931242956158,
-      "recall": 0.6175682274132708,
-      "f1": 0.617322738149962,
+      "accuracy": 0.8173333333333334,
+      "precision": 0.7415828103251233,
+      "recall": 0.7282403050220584,
+      "f1": 0.7341837291594554,
       "confusion_matrix": [
         [
-          1119,
-          117,
-          4
-        ],
-        [
-          73,
-          123,
-          15
-        ],
-        [
-          4,
-          27,
-          18
-        ]
-      ],
-      "per_class": {
-        "labels": [
-          "success",
-          "delayed",
-          "failed"
-        ],
-        "precision": [
-          0.93561872909699,
-          0.4606741573033708,
-          0.4864864864864865
-        ],
-        "recall": [
-          0.9024193548387097,
-          0.5829383886255924,
-          0.3673469387755102
-        ],
-        "f1": [
-          0.9187192118226601,
-          0.5146443514644351,
-          0.4186046511627907
-        ]
-      },
-      "best_params": "{'max_depth': 20, 'min_samples_leaf': 2, 'min_samples_split': 2}"
-    },
-    "random_forest": {
-      "accuracy": 0.8826666666666667,
-      "precision": 0.8004769630780627,
-      "recall": 0.5379913148564731,
-      "f1": 0.5791342897368387,
-      "confusion_matrix": [
-        [
-          1213,
-          27,
+          929,
+          98,
           0
         ],
         [
-          106,
-          104,
-          1
+          92,
+          196,
+          35
         ],
         [
-          2,
-          40,
-          7
+          1,
+          48,
+          101
         ]
       ],
       "per_class": {
@@ -143,62 +117,188 @@
           "failed"
         ],
         "precision": [
-          0.9182437547312642,
-          0.6081871345029239,
-          0.875
+          0.9090019569471625,
+          0.5730994152046783,
+          0.7426470588235294
         ],
         "recall": [
-          0.978225806451613,
-          0.4928909952606635,
-          0.14285714285714285
+          0.9045764362220059,
+          0.6068111455108359,
+          0.6733333333333333
         ],
         "f1": [
-          0.9472862163217494,
-          0.5445026178010471,
-          0.24561403508771928
+          0.9067837969741337,
+          0.5894736842105263,
+          0.7062937062937062
         ]
       },
-      "best_params": "{'max_depth': 15, 'max_features': 'sqrt', 'n_estimators': 100}",
+      "best_params": "{'max_depth': 20, 'min_samples_leaf': 5, 'min_samples_split': 2}"
+    },
+    "random_forest": {
+      "accuracy": 0.8753333333333333,
+      "precision": 0.8418852906114872,
+      "recall": 0.7800810051552695,
+      "f1": 0.8064809662890332,
+      "confusion_matrix": [
+        [
+          986,
+          41,
+          0
+        ],
+        [
+          86,
+          224,
+          13
+        ],
+        [
+          0,
+          47,
+          103
+        ]
+      ],
+      "per_class": {
+        "labels": [
+          "success",
+          "delayed",
+          "failed"
+        ],
+        "precision": [
+          0.9197761194029851,
+          0.717948717948718,
+          0.8879310344827587
+        ],
+        "recall": [
+          0.9600778967867576,
+          0.6934984520123839,
+          0.6866666666666666
+        ],
+        "f1": [
+          0.9394949976179133,
+          0.705511811023622,
+          0.7744360902255639
+        ]
+      },
+      "best_params": "{'max_depth': 20, 'max_features': 'sqrt', 'n_estimators': 300}",
       "feature_importance": [
         {
           "feature": "traffic_level",
-          "importance": 0.1731
+          "importance": 0.1494
+        },
+        {
+          "feature": "distance_traffic_interaction",
+          "importance": 0.1458
+        },
+        {
+          "feature": "zone_risk_score",
+          "importance": 0.0935
         },
         {
           "feature": "delivery_distance_km",
-          "importance": 0.1548
+          "importance": 0.082
         },
         {
           "feature": "rider_experience_months",
-          "importance": 0.1256
-        },
-        {
-          "feature": "time_of_day",
-          "importance": 0.1154
+          "importance": 0.0761
         },
         {
           "feature": "order_size_kg",
-          "importance": 0.1124
+          "importance": 0.065
         },
         {
-          "feature": "location_type",
-          "importance": 0.0941
+          "feature": "time_risk_category",
+          "importance": 0.0551
         },
         {
           "feature": "address_quality_score",
-          "importance": 0.093
+          "importance": 0.0434
         },
         {
-          "feature": "day_of_week",
-          "importance": 0.0568
+          "feature": "location_type_rural",
+          "importance": 0.0402
         },
         {
-          "feature": "weather_condition",
-          "importance": 0.0448
+          "feature": "time_of_day_evening",
+          "importance": 0.0221
         },
         {
-          "feature": "season",
-          "importance": 0.0299
+          "feature": "time_of_day_night",
+          "importance": 0.022
+        },
+        {
+          "feature": "weather_condition_rainy",
+          "importance": 0.0201
+        },
+        {
+          "feature": "weather_condition_clear",
+          "importance": 0.0185
+        },
+        {
+          "feature": "location_type_suburban",
+          "importance": 0.0118
+        },
+        {
+          "feature": "season_rainy",
+          "importance": 0.0115
+        },
+        {
+          "feature": "seasonal_disruption_indicator",
+          "importance": 0.0112
+        },
+        {
+          "feature": "location_type_island",
+          "importance": 0.0111
+        },
+        {
+          "feature": "location_type_mainland",
+          "importance": 0.0108
+        },
+        {
+          "feature": "season_dry",
+          "importance": 0.0107
+        },
+        {
+          "feature": "time_of_day_early_morning",
+          "importance": 0.0105
+        },
+        {
+          "feature": "day_of_week_tuesday",
+          "importance": 0.0094
+        },
+        {
+          "feature": "day_of_week_friday",
+          "importance": 0.0093
+        },
+        {
+          "feature": "time_of_day_afternoon",
+          "importance": 0.0092
+        },
+        {
+          "feature": "day_of_week_thursday",
+          "importance": 0.0091
+        },
+        {
+          "feature": "day_of_week_sunday",
+          "importance": 0.0091
+        },
+        {
+          "feature": "day_of_week_monday",
+          "importance": 0.009
+        },
+        {
+          "feature": "weather_condition_humid",
+          "importance": 0.0086
+        },
+        {
+          "feature": "day_of_week_wednesday",
+          "importance": 0.0086
+        },
+        {
+          "feature": "day_of_week_saturday",
+          "importance": 0.0085
+        },
+        {
+          "feature": "time_of_day_morning",
+          "importance": 0.0084
         }
       ]
     }
